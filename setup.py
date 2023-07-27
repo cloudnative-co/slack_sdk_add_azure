@@ -11,7 +11,7 @@ setup(
         "azure-functions",
         "azure-functions-worker",
         "azure-storage-blob",
-        "slack_sdk",
+        "slack_sdk"
     ],
     entry_points={
         "console_scripts": [
