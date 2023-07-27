@@ -26,10 +26,14 @@ class BlobStore(object):
         response = self.container.upload_blob(name=blob, data=data, overwrite=True)
         return response
 
-    def download(self, blob: str):
+    def download(self, blob: str, is_json=True):
         response = self.container.download_blob(blob).readall()
         body = response.readall().decode("utf-8")
-        data = json.loads(body)
+        data = ""
+        if is_json:
+            data = json.loads(body)
+        else:
+            data = body
         return data
 
     def delete(self, blob: str):

@@ -3,7 +3,7 @@ import logging
 from logging import Logger
 from typing import Optional
 
-from slack_sdk.oauth.state_util.blob_store import BlobStore
+from slack_sdk_azure.oauth.state_util.blob_store import BlobStore
 from azure.storage.blob._blob_service_client import BlobServiceClient
 from slack_sdk.errors import SlackClientConfigurationError
 from slack_sdk.oauth.installation_store.async_installation_store import (

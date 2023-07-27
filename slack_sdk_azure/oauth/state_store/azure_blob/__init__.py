@@ -3,12 +3,14 @@ import time
 from logging import Logger
 from uuid import uuid4
 
+from slack_sdk_azure.oauth.state_util.blob_store import BlobStore
 from azure.storage.blob._blob_service_client import BlobServiceClient
+
 from slack_sdk.oauth.state_store.async_state_store import AsyncOAuthStateStore
 from slack_sdk.oauth.state_store.state_store import OAuthStateStore
 
 
-class AzureBlobOAuthStateStore(OAuthStateStore, AsyncOAuthStateStore):
+class AzureBlobOAuthStateStore(OAuthStateStore, AsyncOAuthStateStore, BlobStore):
     def __init__(
         self,
         *,
@@ -35,31 +37,17 @@ class AzureBlobOAuthStateStore(OAuthStateStore, AsyncOAuthStateStore):
 
     def issue(self, *args, **kwargs) -> str:
         state = str(uuid4())
-        response = self.blob_service_client.put_object(
-            Bucket=self.container_name,
-            Body=str(time.time()),
-            Key=state,
-        )
-        self.logger.debug(f"S3 put_object response: {response}")
+        response = self.upload(blob=state, data=str(time.time()))
         return state
 
     def consume(self, state: str) -> bool:
         try:
-            fetch_response = self.blob_service_client.get_object(
-                Bucket=self.container_name,
-                Key=state,
-            )
-            self.logger.debug(f"S3 get_object response: {fetch_response}")
-            body = fetch_response["Body"].read().decode("utf-8")
+            body = self.download(blob=state, is_json=False)
             created = float(body)
             expiration = created + self.expiration_seconds
             still_valid: bool = time.time() < expiration
 
-            deletion_response = self.blob_service_client.delete_object(
-                Bucket=self.container_name,
-                Key=state,
-            )
-            self.logger.debug(f"S3 delete_object response: {deletion_response}")
+            deletion_response = self.delete(state)
             return still_valid
         except Exception as e:  # skipcq: PYL-W0703
             message = f"Failed to find any persistent data for state: {state} - {e}"
