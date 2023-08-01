@@ -8,13 +8,10 @@ class BlobStore(object):
 
     def __init__(
         self,
-        *
+        *,
         client: BlobServiceClient,
         container_name: str,
-        client_id: str,
-        historical_data_enabled: bool = True,
-        logger: Logger = logging.getLogger(__name__),
-
+        logger: Logger = logging.getLogger(__name__)
     ):
         self.container = client.get_container_client(
             container=container_name
