@@ -1,10 +1,10 @@
+import azure
 import json
 import logging
 from logging import Logger
 from typing import Optional
-
-from slack_sdk_azure.oauth.state_util.blob_store import BlobStore
 from azure.storage.blob._blob_service_client import BlobServiceClient
+from azure.storage.blob._container_client import ContainerClient
 from slack_sdk.errors import SlackClientConfigurationError
 from slack_sdk.oauth.installation_store.async_installation_store import (
     AsyncInstallationStore,
@@ -14,7 +14,12 @@ from slack_sdk.oauth.installation_store.models.bot import Bot
 from slack_sdk.oauth.installation_store.models.installation import Installation
 
 
-class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, BlobStore):
+class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore):
+
+    _client: BlobServiceClient = None
+    _container: ContainerClient = None
+    _container_name: str = ""
+
     def __init__(
         self,
         *,
@@ -27,7 +32,9 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, Blob
         self.historical_data_enabled = historical_data_enabled
         self.client_id = client_id
         self._logger = logger
-
+        self._client = client
+        self._container_name = container_name
+        self.container_init()
 
     @property
     def logger(self) -> Logger:
@@ -40,28 +47,6 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, Blob
 
     async def async_save_bot(self, bot: Bot):
         return self.save_bot(bot)
-
-    """
-    def upload(self, blob: str, data):
-        response = self.container_client.client.upload_blob(name=blob, data=data, overwrite=True)
-        self.logger.debug(f"Blob upload response: {response}")
-        return response
-
-    def download(self, blob: str):
-        response = self.container_client.download_blob(blob).readall()
-        self.logger.debug(f"Blob download: {response.name}")
-        body = response.readall().decode("utf-8")
-        data = json.loads(body)
-        return data
-
-    def delete(self, blob: str):
-        response = self.container_client.delete_blob(blob=blob, delete_snapshots="include")
-        return response
-
-    def list(self, prefix: str):
-        response = self.container_client.list_blobs(name_starts_with=prefix)
-        return response
-    """
 
     def save(self, installation: Installation):
         none = "none"
@@ -165,6 +150,8 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, Blob
         user_id: Optional[str] = None,
         is_enterprise_install: Optional[bool] = False,
     ) -> Optional[Installation]:
+
+        self.logger.info("find_installtion azure blob")
         none = "none"
         e_id = enterprise_id or none
         t_id = team_id or none
@@ -174,9 +161,11 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, Blob
         try:
             key = f"{workspace_path}/installer-{user_id}-latest" if user_id else f"{workspace_path}/installer-latest"
             data = self.download(key)
+            if data is None:
+                data = {}
             installation = Installation(**data)
-
             if installation is not None and user_id is not None:
+                self.logger.info("not installation")
                 # Retrieve the latest bot token, just in case
                 # See also: https://github.com/slackapi/bolt-python/issues/664
                 latest_bot_installation = self.find_installation(
@@ -198,8 +187,10 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, Blob
             return installation
 
         except Exception as e:  # skipcq: PYL-W0703
+            self.logger.warning(f"Exception Type: {type(e)}")
             message = f"Failed to find an installation data for enterprise: {e_id}, team: {t_id}: {e}"
             self.logger.warning(message)
+            raise e
             return None
 
     async def async_delete_bot(self, *, enterprise_id: Optional[str], team_id: Optional[str]) -> None:
@@ -287,3 +278,49 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore, Blob
             except Exception as e:  # skipcq: PYL-W0703
                 message = f"Failed to find bot installation data for enterprise: {e_id}, team: {t_id}: {e}"
                 raise SlackClientConfigurationError(message)
+
+    def container_init(self):
+        self._container = self.blob_service_client.get_container_client(
+            container=self.container_name
+        )
+        if not self.container.exists():
+            self.container.create_container()
+
+    def upload(self, blob: str, data):
+        response = self.container.upload_blob(name=blob, data=data, overwrite=True)
+        return response
+
+    def download(self, blob: str, is_json=True):
+        data = None
+        try:
+            response = self.container.download_blob(blob)
+            body = response.readall().decode("utf-8")
+            if is_json:
+                data = json.loads(body)
+            else:
+                data = body
+        except azure.core.exceptions.ResourceNotFoundError as e:
+            data = None
+        return data
+
+    def delete(self, blob: str):
+        response = self.container.delete_blob(blob=blob, delete_snapshots="include")
+        return response
+
+    def list(self, prefix: str):
+        response = self.container.list_blobs(name_starts_with=prefix)
+        return response
+
+    @property
+    def blob_service_client(self) -> BlobServiceClient:
+        return self._client
+
+    @property
+    def container_name(self) -> str:
+        return self._container_name
+
+    @property
+    def container(self) -> ContainerClient:
+        if self._container is None:
+            self.container_init()
+        return self._container
