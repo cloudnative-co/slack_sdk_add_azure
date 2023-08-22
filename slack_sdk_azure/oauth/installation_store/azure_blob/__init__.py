@@ -151,7 +151,6 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore):
         is_enterprise_install: Optional[bool] = False,
     ) -> Optional[Installation]:
 
-        self.logger.info("find_installtion azure blob")
         none = "none"
         e_id = enterprise_id or none
         t_id = team_id or none
@@ -165,7 +164,6 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore):
                 data = {}
             installation = Installation(**data)
             if installation is not None and user_id is not None:
-                self.logger.info("not installation")
                 # Retrieve the latest bot token, just in case
                 # See also: https://github.com/slackapi/bolt-python/issues/664
                 latest_bot_installation = self.find_installation(
@@ -300,6 +298,7 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore):
             else:
                 data = body
         except azure.core.exceptions.ResourceNotFoundError as e:
+            self.logger.warning(str(e))
             data = None
         return data
 
