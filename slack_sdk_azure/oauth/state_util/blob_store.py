@@ -24,7 +24,7 @@ class BlobStore(object):
         return response
 
     def download(self, blob: str, is_json=True):
-        response = self.container.download_blob(blob).readall()
+        response = self.container.download_blob(blob)
         body = response.readall().decode("utf-8")
         data = ""
         if is_json:
