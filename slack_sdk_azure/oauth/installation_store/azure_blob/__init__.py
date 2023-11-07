@@ -158,7 +158,7 @@ class AzureBlobInstallationStore(InstallationStore, AsyncInstallationStore):
             t_id = none
         workspace_path = f"{self.client_id}/{e_id}-{t_id}"
         try:
-            key = f"{workspace_path}/installer-{user_id}-latest" if user_id else f"{workspace_path}/installer-latest"
+            key = f"{workspace_path}/installer-latest"
             data = self.download(key)
             if data is None:
                 data = {}
